@@ -14,7 +14,7 @@ app = Flask(__name__)
 
 # --- [手動標記：部署版本] ---
 # 每次修改代碼建議改一下這個時間，這樣妳打開網頁就能確認 Render 更新了沒
-DEPLOY_VERSION = "2026-03-13 14:05 (最新修正診斷版)"
+DEPLOY_VERSION = "2026-03-13 8787 (最新修正診斷版)"
 
 # --- 1. 憑證設定與主動檢查 ---
 CHANNEL_ACCESS_TOKEN = os.environ.get('LINE_CHANNEL_ACCESS_TOKEN')
