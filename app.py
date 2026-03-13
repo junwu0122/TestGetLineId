@@ -76,7 +76,7 @@ def callback():
 @app.route("/test-push", methods=['GET'])
 def test_push():
     # 💡 這裡填入妳抓到的 C 開頭 ID
-    TARGET_ID = "C15e3e1094ff40afd0c843bbd6a14e384" 
+    TARGET_ID = "C40b1192a7c468e4077ce58c296f149e9" 
     
     if not line_bot_api:
         return "<h1>錯誤</h1><p>找不到 Channel Access Token。</p>", 500
