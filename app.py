@@ -7,10 +7,10 @@ from linebot.models import MessageEvent, TextMessage, TextSendMessage
 
 app = Flask(__name__)
 
-# 根目錄，讓 Render 顯示健康
+# 首頁 (讓 Render 健康檢查過關)
 @app.route("/", methods=['GET'])
 def index():
-    return "Debug Mode: Online", 200
+    return "Group ID Grabber: Online", 200
 
 line_bot_api = LineBotApi(os.environ.get('LINE_CHANNEL_ACCESS_TOKEN'))
 handler = WebhookHandler(os.environ.get('LINE_CHANNEL_SECRET'))
@@ -20,9 +20,8 @@ def callback():
     signature = request.headers.get('X-Line-Signature')
     body = request.get_data(as_text=True)
     
-    # 只要有訊號進來，Log 一定會印出這一行
-    print(f"--- 接收到訊號 ---")
-    print(body)
+    # 保留暴力 Log，以防萬一
+    print(f"--- Webhook Data ---\n{body}")
     sys.stdout.flush()
 
     try:
@@ -33,19 +32,27 @@ def callback():
 
 @handler.add(MessageEvent, message=TextMessage)
 def handle_message(event):
-    # 取得發送者的 ID
-    user_id = event.source.user_id
+    # 判斷來源：如果是群組就抓 GroupID，如果是多人聊天室就抓 RoomID
+    source_type = event.source.type
+    target_id = "未知"
     
-    # 取得群組或聊天室 ID (如果有)
-    group_id = getattr(event.source, 'group_id', '非群組')
-    room_id = getattr(event.source, 'room_id', '非聊天室')
+    if source_type == "group":
+        target_id = event.source.group_id
+    elif source_type == "room":
+        target_id = event.source.room_id
+    else:
+        target_id = event.source.user_id
 
-    msg = f"抓到 ID 了！\n你的 UserID: {user_id}\n群組 ID: {group_id}\n聊天室 ID: {room_id}"
+    # 邏輯：Bot 直接在 LINE 裡面噴出 ID
+    reply_text = f"✅ 抓到 ID 了！\n類型: {source_type}\nID: {target_id}"
     
-    # 讓 Bot 直接回話，妳在手機上就能看到
-    line_bot_api.reply_message(event.reply_token, TextSendMessage(text=msg))
+    line_bot_api.reply_message(
+        event.reply_token,
+        TextSendMessage(text=reply_text)
+    )
     
-    print(msg)
+    # 同步印在 Render Logs
+    print(f"\n[SUCCESS] {reply_text}\n")
     sys.stdout.flush()
 
 if __name__ == "__main__":
