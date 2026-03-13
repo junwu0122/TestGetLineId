@@ -1,57 +1,72 @@
 import os
 import sys
+import json
 from flask import Flask, request, abort
 from linebot import LineBotApi, WebhookHandler
 from linebot.exceptions import InvalidSignatureError
-# 修正處：加入了 TextSendMessage
-from linebot.models import MessageEvent, TextMessage, MemberJoinedEvent, TextSendMessage
+from linebot.models import MessageEvent, TextMessage, MemberJoinedEvent, TextSendMessage, JoinEvent
 
 app = Flask(__name__)
 
-# 從環境變數讀取
-line_bot_api = LineBotApi(os.getenv('LINE_CHANNEL_ACCESS_TOKEN'))
-handler = WebhookHandler(os.getenv('LINE_CHANNEL_SECRET'))
+# 1. 補上首頁路由，讓 Render 偵測 Port 時不會報 404
+@app.route("/", methods=['GET'])
+def index():
+    return "Bot is Online!", 200
+
+line_bot_api = LineBotApi(os.environ.get('LINE_CHANNEL_ACCESS_TOKEN'))
+handler = WebhookHandler(os.environ.get('LINE_CHANNEL_SECRET'))
 
 @app.route("/callback", methods=['POST'])
 def callback():
-    signature = request.headers['X-Line-Signature']
+    signature = request.headers.get('X-Line-Signature')
     body = request.get_data(as_text=True)
+    
+    # --- 強效偵錯：直接印出所有進來的 JSON ---
+    print("--- 收到原始 Webhook 內容 ---")
+    print(body)
+    sys.stdout.flush() 
+    # ---------------------------------------
+
     try:
         handler.handle(body, signature)
     except InvalidSignatureError:
+        print("❌ 簽章驗證失敗，請檢查 Secret 是否正確")
         abort(400)
     return 'OK'
 
-# 功能 1：抓取發言者與群組 ID
+# 功能 1：當有人發訊息時（抓 ID 的最快方法）
 @handler.add(MessageEvent, message=TextMessage)
 def handle_message(event):
+    source_type = event.source.type
     user_id = event.source.user_id
-    group_id = getattr(event.source, 'group_id', 'N/A')
-    print(f"!!! 抓到 ID !!!\nUser ID: {user_id}\nGroup ID: {group_id}")
-    sys.stdout.flush() # 確保 Log 立即顯示在 Render
-
-# 功能 2：有人加入群組時抓 ID
-@handler.add(MemberJoinedEvent)
-def handle_member_joined(event):
-    for member in event.joined.members:
-        print(f"!!! 新成員加入 !!!\nUser ID: {member.user_id}")
+    
+    print(f"--- 偵測到訊息事件 (來源類型: {source_type}) ---")
+    
+    if source_type == 'group':
+        g_id = event.source.group_id
+        print(f"✅ 抓到 Group ID: {g_id}")
+        # 直接回覆在群組，你就不用一直看電腦 Log
+        line_bot_api.reply_message(event.reply_token, TextSendMessage(text=f"群組 ID 是：\n{g_id}"))
+    
+    elif source_type == 'room':
+        r_id = event.source.room_id
+        print(f"✅ 抓到 Room ID: {r_id}")
+        line_bot_api.reply_message(event.reply_token, TextSendMessage(text=f"多人聊天室 ID：\n{r_id}"))
+    
+    else:
+        print(f"這是個人私訊，User ID: {user_id}")
+    
     sys.stdout.flush()
 
-# 測試路由：主動推播訊息到群組
-@app.route("/test-push")
-def test_push():
-    # 這是你剛才抓到的 Group ID
-    target_id = "C15e3e1094ff40afd0c843bbd6a14e384" 
-    try:
-        line_bot_api.push_message(
-            target_id,
-            TextSendMessage(text="🚨 測試推播：監視系統連線正常！\n目前設備地點：Render 測試環境")
-        )
-        return "<h1>推播成功！</h1><p>請檢查您的 Line 群組訊息。</p>"
-    except Exception as e:
-        return f"<h1>推播失敗</h1><p>錯誤原因：{e}</p>"
+# 功能 2：當 Bot 被加入群組時（主動抓 ID）
+@handler.add(JoinEvent)
+def handle_join(event):
+    if event.source.type == "group":
+        g_id = event.source.group_id
+        print(f"🚀 Bot 已加入群組！ID: {g_id}")
+        line_bot_api.reply_message(event.reply_token, TextSendMessage(text=f"感謝邀請！本群組 ID：\n{g_id}"))
+    sys.stdout.flush()
 
 if __name__ == "__main__":
-    # Render 會提供 PORT 環境變數
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
